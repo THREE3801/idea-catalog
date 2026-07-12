@@ -14,6 +14,11 @@ create table if not exists ideas (
 
 alter table ideas enable row level security;
 
+-- SQL Editor 建表时,anon/authenticated 角色不会自动拿到表权限,
+-- 需要显式 GRANT,否则即使 RLS 策略放行,也会报 "permission denied for table"。
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.ideas to anon, authenticated;
+
 -- ============================================================
 -- 方案 A(默认): 不设访问口令,anon key 可直接读写。
 -- 个人使用、且不打算公开分享网址的情况下,这样最简单。
