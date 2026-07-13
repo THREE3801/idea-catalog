@@ -1,9 +1,4 @@
-const STATUS_LABEL = {
-  pending: "待验证",
-  doing: "进行中",
-  dropped: "已放弃",
-  done: "已完成",
-};
+import { STATUS } from "./statuses";
 
 function timestamp() {
   const d = new Date();
@@ -32,11 +27,12 @@ export function exportAsText(ideas) {
   const lines = ideas.map((idea) => {
     const parts = [
       `#${String(idea.num).padStart(3, "0")} ${idea.title}`,
-      `状态: ${STATUS_LABEL[idea.status] || idea.status}`,
+      `状态: ${STATUS[idea.status]?.label || idea.status}`,
       `创建时间: ${new Date(idea.createdAt).toLocaleString("zh-CN")}`,
     ];
     if (idea.deadline) parts.push(`截止时间: ${idea.deadline}`);
     if (idea.link) parts.push(`链接: ${idea.link}`);
+    if (idea.tags && idea.tags.length) parts.push(`标签: ${idea.tags.map((t) => `#${t}`).join(" ")}`);
     if (idea.note) parts.push(`备注: ${idea.note}`);
     return parts.join("\n");
   });

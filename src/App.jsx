@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, Lock, CornerDownLeft } from "lucide-react";
-import { STATUSES, detectUrl } from "./lib/statuses";
+import { useEffect, useState } from "react";
+import { ORDER, STATUS, cycleStatus as nextStatus } from "./lib/statuses";
+import { parseInput } from "./lib/parseIntent";
 import { fetchIdeas, createIdea, updateIdea, deleteIdea } from "./lib/storage";
 import { exportAsJson, exportAsText } from "./lib/export";
-import IdeaCard from "./components/IdeaCard";
+import IdeaRow from "./components/IdeaRow";
+import ParsePreview from "./components/ParsePreview";
 import AccessSecretPanel from "./components/AccessSecretPanel";
+
+const FILTERS = [["all", "全部"], ...ORDER.map((k) => [k, STATUS[k].label])];
 
 export default function App() {
   const [ideas, setIdeas] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState("all");
-  const [quickValue, setQuickValue] = useState("");
+  const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [showSecretPanel, setShowSecretPanel] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -29,22 +32,32 @@ export default function App() {
     })();
   }, []);
 
-  const handleQuickAdd = async () => {
-    const raw = quickValue.trim();
+  const handleKeyDown = async (e) => {
+    if (e.key !== "Enter") return;
+    const raw = draft.trim();
     if (!raw) return;
-    const url = detectUrl(raw);
+    const p = parseInput(raw);
     try {
-      const entry = await createIdea({ title: raw, link: url || "" });
+      const entry = await createIdea({
+        title: p.title || raw,
+        link: p.link,
+        deadline: p.deadline,
+        status: p.status,
+        tags: p.tags,
+      });
       setIdeas((prev) => [entry, ...prev]);
-      setQuickValue("");
+      setDraft("");
       setError("");
-    } catch (e) {
+    } catch (err) {
       setError("保存失败,请重试");
-      console.error(e);
+      console.error(err);
     }
   };
 
-  const handleStatusChange = async (id, status) => {
+  const handleCycleStatus = async (id) => {
+    const idea = ideas.find((i) => i.id === id);
+    if (!idea) return;
+    const status = nextStatus(idea.status);
     setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
     try {
       await updateIdea(id, { status });
@@ -76,60 +89,92 @@ export default function App() {
     }
   };
 
-  const filtered = ideas.filter((i) => filter === "all" || i.status === filter);
-
-  const counts = useMemo(() => {
-    const c = { all: ideas.length };
-    STATUSES.forEach((s) => (c[s.key] = ideas.filter((i) => i.status === s.key).length));
-    return c;
-  }, [ideas]);
+  const counts = { all: ideas.length };
+  ORDER.forEach((k) => (counts[k] = ideas.filter((i) => i.status === k).length));
+  const filtered = filter === "all" ? ideas : ideas.filter((i) => i.status === filter);
 
   return (
-    <div className="min-h-screen w-full" style={{ background: "#EDEEE7" }}>
-      <div className="max-w-2xl mx-auto px-5 py-10">
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        padding: "60px 20px",
+        background: "radial-gradient(120% 90% at 50% 0%, #DAD8CE 0%, #CFCDC2 100%)",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "660px",
+          margin: "0 auto",
+          background: "#EFEDE4",
+          border: "1px solid #CFCDC2",
+          borderRadius: "8px",
+          padding: "32px 34px 30px",
+          boxShadow: "0 10px 30px rgba(60,55,40,0.10)",
+          boxSizing: "border-box",
+        }}
+      >
         {/* Header */}
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div
-              className="text-xs tracking-widest uppercase mb-1"
-              style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#8A8A82", letterSpacing: "0.12em" }}
-            >
-              点子索引卡 · Idea Catalog
-            </div>
-            <h1 className="text-3xl" style={{ fontFamily: "'Source Serif 4', 'Georgia', serif", color: "#1F2937", fontWeight: 600 }}>
-              还没验证的想法
-            </h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "22px" }}>
+          <div style={{ font: "500 11px 'IBM Plex Mono', monospace", letterSpacing: "0.16em", color: "#A09E93" }}>
+            IDEA CATALOG · 意图捕获
           </div>
-          <div className="flex items-center gap-1">
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
             <button
               onClick={() => setShowSecretPanel(true)}
-              className="p-2 rounded-sm"
-              style={{ color: "#9CA3AF" }}
               title="访问口令设置"
+              style={{ font: "14px 'IBM Plex Mono', monospace", color: "#A09E93", background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
-              <Lock size={15} />
+              ⌸
             </button>
-            <div className="relative">
+            <div style={{ position: "relative" }}>
               <button
                 onClick={() => setShowExportMenu((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-sm text-sm"
-                style={{ background: "#E5E7E4", color: "#1F2937", fontFamily: "'IBM Plex Mono', monospace" }}
                 title="导出数据"
+                style={{
+                  font: "12px 'IBM Plex Mono', monospace",
+                  color: "#4B4A44",
+                  background: "#FCFBF5",
+                  border: "1px solid #D8D7CD",
+                  borderRadius: "3px",
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                }}
               >
-                <Download size={14} /> 导出
+                ↓ 导出
               </button>
               {showExportMenu && (
                 <div
-                  className="absolute right-0 mt-1 rounded-sm overflow-hidden z-10"
-                  style={{ background: "#fff", border: "1px solid #DEDFD8", minWidth: "120px" }}
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    marginTop: "4px",
+                    borderRadius: "4px",
+                    overflow: "hidden",
+                    zIndex: 10,
+                    background: "#FFFEFA",
+                    border: "1px solid #E2E1D7",
+                    boxShadow: "0 8px 24px rgba(50,45,35,0.16)",
+                    minWidth: "128px",
+                  }}
                 >
                   <button
                     onClick={() => {
                       exportAsJson(ideas);
                       setShowExportMenu(false);
                     }}
-                    className="block w-full text-left px-3 py-2 text-xs"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#1F2937" }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      font: "12px 'IBM Plex Mono', monospace",
+                      color: "#26261F",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   >
                     导出为 JSON
                   </button>
@@ -138,86 +183,121 @@ export default function App() {
                       exportAsText(ideas);
                       setShowExportMenu(false);
                     }}
-                    className="block w-full text-left px-3 py-2 text-xs"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#1F2937" }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      font: "12px 'IBM Plex Mono', monospace",
+                      color: "#26261F",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   >
                     导出为纯文本
                   </button>
                 </div>
               )}
             </div>
+            <span style={{ font: "12px 'IBM Plex Mono', monospace", color: "#AEACA1" }}>{ideas.length} 条</span>
           </div>
         </div>
 
-        {/* Quick input */}
-        <div
-          className="mb-8 flex items-center gap-2 px-3 py-2.5 rounded-sm"
-          style={{ background: "#FFFFFF", border: "1px solid #DEDFD8" }}
-        >
-          <input
-            autoFocus
-            value={quickValue}
-            onChange={(e) => setQuickValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleQuickAdd();
+        {/* Intent input */}
+        <div style={{ position: "relative" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              alignItems: "flex-start",
+              padding: "16px 18px",
+              background: "#FCFBF6",
+              border: "1px solid #D6D5CA",
+              borderRadius: "8px",
             }}
-            placeholder="记一条点子,或粘贴链接,回车即存…"
-            className="w-full text-base outline-none"
-            style={{ fontFamily: "'Source Serif 4', serif", color: "#1F2937", background: "transparent" }}
-          />
-          <CornerDownLeft size={15} color="#B0B0A8" />
+          >
+            <span style={{ font: "15px 'IBM Plex Mono', monospace", color: "#C9B27A", flex: "0 0 auto", paddingTop: "1px" }}>✳</span>
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="写点什么都行:读完《思维的乐趣》写笔记 下周五前 #写作 …"
+              style={{
+                flex: 1,
+                border: "none",
+                background: "none",
+                font: "17px 'Source Serif 4', serif",
+                color: "#26261F",
+                outline: "none",
+                lineHeight: 1.5,
+              }}
+            />
+            <span style={{ font: "13px 'IBM Plex Mono', monospace", color: "#BDBBB0", flex: "0 0 auto", alignSelf: "center" }}>↵</span>
+          </div>
+
+          <ParsePreview draft={draft} />
         </div>
 
         {/* Filter tabs */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {[{ key: "all", label: "全部" }, ...STATUSES].map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setFilter(s.key)}
-              className="px-3 py-1.5 rounded-sm text-xs transition-colors"
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                background: filter === s.key ? "#1F2937" : "transparent",
-                color: filter === s.key ? "#F4F4F2" : "#6B7280",
-                border: filter === s.key ? "1px solid #1F2937" : "1px solid #DEDFD8",
-              }}
-            >
-              {s.label} · {counts[s.key] || 0}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", margin: "26px 0 20px" }}>
+          {FILTERS.map(([key, label]) => {
+            const active = filter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                style={{
+                  padding: 0,
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  font: "13px 'IBM Plex Mono', monospace",
+                  color: active ? "#26261F" : "#A6A498",
+                  display: "inline-flex",
+                  alignItems: "baseline",
+                  gap: "5px",
+                  borderBottom: active ? "2px solid #26261F" : "2px solid transparent",
+                  paddingBottom: "3px",
+                }}
+              >
+                {label}
+                <span style={{ font: "11px 'IBM Plex Mono', monospace", color: active ? "#87867E" : "#BDBBB0" }}>
+                  {counts[key] || 0}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {error && (
-          <div className="text-xs mb-4" style={{ color: "#B3423A" }}>
-            {error}
-          </div>
+          <div style={{ font: "12px 'IBM Plex Mono', monospace", color: "#B3423A", marginBottom: "14px" }}>{error}</div>
         )}
 
-        {/* Cards */}
         {loaded && filtered.length === 0 && (
           <div
-            className="text-center py-16 rounded-sm"
-            style={{ border: "1px dashed #DEDFD8", color: "#9CA3AF", fontFamily: "'IBM Plex Mono', monospace", fontSize: "13px" }}
+            style={{
+              textAlign: "center",
+              padding: "40px 0",
+              font: "13px 'IBM Plex Mono', monospace",
+              color: "#B0AEA3",
+              borderTop: "1px solid #E4E2D8",
+            }}
           >
-            这里还是空的 — 想到点子就在上面记一条
+            这里还是空的 — 上面写一句就能归档
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
-          {filtered.map((idea) => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDelete}
-              onSaveEdit={handleSaveEdit}
-            />
-          ))}
-        </div>
-
-        <div className="text-center mt-10 text-xs" style={{ color: "#B0B0A8", fontFamily: "'IBM Plex Mono', monospace" }}>
-          数据保存在 Supabase,刷新页面不会丢
-        </div>
+        {filtered.map((idea) => (
+          <IdeaRow
+            key={idea.id}
+            idea={idea}
+            onCycleStatus={handleCycleStatus}
+            onDelete={handleDelete}
+            onSaveEdit={handleSaveEdit}
+          />
+        ))}
       </div>
 
       {showSecretPanel && <AccessSecretPanel onClose={() => setShowSecretPanel(false)} />}

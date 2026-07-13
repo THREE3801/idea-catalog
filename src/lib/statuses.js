@@ -1,36 +1,42 @@
-export const STATUSES = [
-  { key: "pending", label: "待验证", color: "#C08A2E", bg: "#FBF3E4" },
-  { key: "doing", label: "进行中", color: "#2D5A6B", bg: "#E9F1F3" },
-  { key: "dropped", label: "已放弃", color: "#9CA3AF", bg: "#F1F1EF" },
-  { key: "done", label: "已完成", color: "#3F7A57", bg: "#E9F3EC" },
-];
+export const STATUS = {
+  pending: { label: "待验证", fg: "#A9761D", bg: "#F6EDD6", dot: "#C08A2E" },
+  doing: { label: "进行中", fg: "#2D5A6B", bg: "#E3EDF0", dot: "#2D5A6B" },
+  done: { label: "已完成", fg: "#3F7A57", bg: "#E6F0E9", dot: "#3F7A57" },
+  dropped: { label: "已放弃", fg: "#87867E", bg: "#EDEDE8", dot: "#ABAAA1" },
+};
+
+export const ORDER = ["pending", "doing", "done", "dropped"];
 
 export function statusMeta(key) {
-  return STATUSES.find((s) => s.key === key) || STATUSES[0];
+  return STATUS[key] || STATUS.pending;
 }
 
-export function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target - today) / 86400000);
+export function cycleStatus(key) {
+  return ORDER[(ORDER.indexOf(key) + 1) % ORDER.length];
 }
 
-export function deadlineLabel(dateStr) {
-  const d = daysUntil(dateStr);
-  if (d === null) return null;
-  if (d < 0) return { text: `已超期 ${Math.abs(d)} 天`, urgent: true };
-  if (d === 0) return { text: "今天截止", urgent: true };
-  if (d <= 3) return { text: `剩 ${d} 天`, urgent: true };
-  return { text: `剩 ${d} 天`, urgent: false };
+export function fmtDate(iso) {
+  if (!iso) return "";
+  const p = iso.split("-");
+  return `${p[0]}/${+p[1]}/${+p[2]}`;
 }
 
-const URL_RE = /^(https?:\/\/|www\.)\S+$/i;
+export function daysLeft(deadline, today = new Date()) {
+  const base = new Date(today);
+  base.setHours(0, 0, 0, 0);
+  const target = new Date(deadline + "T00:00:00");
+  return Math.round((target - base) / 86400000);
+}
 
-export function detectUrl(text) {
-  const trimmed = text.trim();
-  if (!URL_RE.test(trimmed)) return null;
-  return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+// 已完成/已放弃的点子显示截止日期本身,不再提示紧迫性;
+// 其余状态显示相对天数,临近(<=3天,含超期)高亮为紧急红。
+export function deadlineDisplay(idea) {
+  if (!idea.deadline) return null;
+  if (idea.status === "done" || idea.status === "dropped") {
+    return { text: `截止 ${fmtDate(idea.deadline)}`, urgent: false };
+  }
+  const d = daysLeft(idea.deadline);
+  const urgent = d <= 3;
+  const text = d < 0 ? `超期${-d}天` : d === 0 ? "今天截止" : `剩${d}天`;
+  return { text, urgent };
 }

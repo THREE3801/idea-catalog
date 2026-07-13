@@ -11,6 +11,7 @@ function mapRow(row) {
     link: row.link || "",
     deadline: row.deadline || "",
     status: row.status,
+    tags: row.tags || [],
     createdAt: row.created_at,
   };
 }
@@ -24,7 +25,7 @@ export async function fetchIdeas() {
   return data.map(mapRow);
 }
 
-export async function createIdea({ title, note, link, deadline }) {
+export async function createIdea({ title, note, link, deadline, status, tags }) {
   const { data, error } = await supabase
     .from(TABLE)
     .insert({
@@ -32,7 +33,8 @@ export async function createIdea({ title, note, link, deadline }) {
       note: note || "",
       link: link || "",
       deadline: deadline || null,
-      status: "pending",
+      status: status || "pending",
+      tags: tags && tags.length ? tags : [],
     })
     .select()
     .single();
@@ -47,6 +49,7 @@ export async function updateIdea(id, patch) {
   if ("link" in patch) payload.link = patch.link;
   if ("deadline" in patch) payload.deadline = patch.deadline || null;
   if ("status" in patch) payload.status = patch.status;
+  if ("tags" in patch) payload.tags = patch.tags;
 
   const { data, error } = await supabase
     .from(TABLE)

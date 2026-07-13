@@ -27,9 +27,11 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxx
 打开 Supabase 后台 → 左侧菜单 **SQL Editor** → **New query**,把 [supabase/schema.sql](supabase/schema.sql) 的全部内容粘贴进去,点 **Run**。
 
 这一步会:
-1. 建 `ideas` 表(字段对应任务文档里的数据结构,`num` 用数据库自增列,不会重复)
+1. 建 `ideas` 表(字段对应任务文档里的数据结构,`num` 用数据库自增列,不会重复;`tags` 是文本数组,存 `#标签`)
 2. 开启 Row Level Security(RLS)
 3. 默认加一条"匿名 key 可完全读写"的策略,这样个人使用最省事
+
+已经建过表、只是缺 `tags` 列?脚本里的 `alter table ... add column if not exists tags ...` 是幂等的,重复执行安全。
 
 ## 访问口令保护(可选)
 
@@ -70,16 +72,20 @@ src/
   lib/
     supabaseClient.js   # Supabase 客户端初始化
     storage.js           # 增删改查
-    statuses.js          # 状态常量、截止日期计算、URL 识别
-    export.js             # 导出 JSON / 纯文本
+    statuses.js          # 状态常量、截止日期计算、状态循环
+    parseIntent.js        # 自然语言意图解析(标题/链接/标签/截止/状态)
+    export.js              # 导出 JSON / 纯文本
   components/
-    IdeaCard.jsx          # 单张点子卡片(状态切换、补充编辑、删除确认)
-    AccessSecretPanel.jsx # 访问口令设置面板
-  App.jsx                  # 页面整体布局与状态管理
+    IdeaRow.jsx            # 单条点子行(状态圆点切换、补充编辑、删除确认)
+    ParsePreview.jsx        # 意图输入的实时解析预览
+    AccessSecretPanel.jsx    # 访问口令设置面板
+  App.jsx                     # 页面整体布局与状态管理
 supabase/
-  schema.sql               # 建表 + RLS 策略
+  schema.sql                  # 建表 + RLS 策略
 ```
+
+设计规格详见 [DESIGN.md](DESIGN.md)(视觉 token、交互规则、解析规则、数据结构、边界)。
 
 ## 明确没做的
 
-按任务文档要求,没有加用户登录、AI 分析、标签系统、付费/推广相关功能。
+按任务文档要求,没有加用户登录(阶段性,详见 DESIGN.md)、AI 分析、付费/推广相关功能。轻量标签系统(`#hashtag`)已经实现,但不会加更复杂的分类体系。

@@ -9,8 +9,12 @@ create table if not exists ideas (
   deadline date,
   status text not null default 'pending'
     check (status in ('pending', 'doing', 'dropped', 'done')),
+  tags text[] not null default '{}',
   created_at timestamptz not null default now()
 );
+
+-- 已经建过表、只是缺 tags 列的情况(幂等,可重复执行):
+alter table ideas add column if not exists tags text[] not null default '{}';
 
 alter table ideas enable row level security;
 
